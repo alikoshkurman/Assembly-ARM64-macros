@@ -1,0 +1,142 @@
+.set read,  0 
+.set write,  1 | 64
+.set creat,   64
+.set trunc,   512 
+.set append,  1025
+
+.set ar, (4 << 6)
+.set aw, (2 << 6)
+.set ax, (1 << 6)
+
+.set gr, (4 << 3)
+.set gw, (2 << 3)
+.set gx, (1 << 3)
+
+.set otr, 4
+.set otw, 2
+.set otx, 1
+.macro file.remove path, fd=#-100
+    .pushsection .rodata
+    1\@:  .asciz "\path"  
+    .popsection
+    mov x0, \fd
+    adrp x1, 1b
+    add x1, x1, :lo12:1b
+    mov x2, #0 
+    mov x8, #35
+    svc #0
+.endm
+.macro save.fd reg, name
+    .pushsection .bss
+   \name: .skip 8
+    .popsection
+    str x9, [sp, #-16]!
+    adr x9, \name
+    str \reg, [x9]
+    ldr x9, [sp], #16
+.endm
+.macro load.fd reg, name
+    str x9, [sp, #-16]!
+    adr x9, \name
+    ldr \reg, [x9]
+    ldr x9, [sp], #16
+.endm
+.macro file.open reg, path, flags=write, mode=#0760, desc=#-100
+    .pushsection .rodata
+    __fpath_\@: .asciz "\path"
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    mov x0, \desc
+    adr x1, __fpath_\@
+    mov x2, \flags
+    mov x3, \mode
+    mov x8, #56
+    svc #0
+    mov \reg, x0
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+.macro file.read fd, name, size, len=xzr
+    .pushsection .bss
+    \name: .skip \size
+    .popsection
+    
+    .ifc \len, x0
+        .error "file.read: len's reg cannot be x0"
+    .endif
+    .ifc \len, x1
+        .error "file.read: len's reg cannot be x1"
+    .endif
+    .ifc \len, x2
+        .error "file.read: len's reg cannot be x2"
+    .endif
+    .ifc \len, x8
+        .error "file.read: len's reg cannot be x8"
+    .endif
+
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    mov x0, \fd
+    adrp x1, \name
+    add x1, x1, :lo12:\name
+    mov x2, \size
+    mov x8, #63
+    svc #0
+    mov \len, x0
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+.macro file.write txt, reg
+    .pushsection .rodata
+    txt_for_filewrite_\@: .ascii "\txt" // if you read that for " " you need \042 txt... \042
+    2: 
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    mov x0, \reg
+    adrp x1, txt_for_filewrite_\@
+    add x1, x1, :lo12:txt_for_filewrite_\@
+    mov x2, #(2b - txt_for_filewrite_\@)
+    mov x8, #64
+    svc #0
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+.macro file.close reg
+    stp x0, x8, [sp, #-32]!
+    mov x0, \reg
+    mov x8, #57
+    svc #0
+    ldp x8, x0, [sp], #32
+.endm
+.macro trunc.file file
+    str x2, [sp, #-16]!
+    file.open x2, \file, trunc 
+    file.close x2
+    ldr x2, [sp], #16
+.endm
+
+.set output, 1
+.set error, 2
+.macro print msg,type=#1
+    .pushsection .rodata
+    1: .ascii "\msg"
+    2: 
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    mov x0, \type
+    adrp x1, 1b
+    add x1, x1, :lo12:1b
+    movz x2, #(2b - 1b)   
+    mov x8, #64         
+    svc #0  
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+.macro exit code 
+    mov x8, #93
+    mov x0, \code
+    svc #0
+.endm
