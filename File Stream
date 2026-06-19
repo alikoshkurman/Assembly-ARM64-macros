@@ -87,6 +87,18 @@
     ldp x8, x2, [sp], #32
     ldp x1, x0, [sp], #32
 .endm
+.macro printb src, t=1, m=mov
+    .pushsection .bss
+    1: 
+    .popsection
+    save
+    mov  x0, \t
+    aadrp x1, \src
+    mov x2, #(1b - \src)
+    mov  x8, #SYS_WRITE
+    run
+    restore
+.endm
 .macro file.write txt, reg
     .pushsection .rodata
     txt_for_filewrite_\@: .ascii "\txt" // if you read that for " " you need \042 txt... \042
