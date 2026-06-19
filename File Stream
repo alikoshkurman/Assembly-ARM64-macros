@@ -57,36 +57,74 @@
     ldp x8, x2, [sp], #32
     ldp x1, x0, [sp], #32
 .endm
-.macro file.read fd, name, size, len=xzr
-    .pushsection .bss
-    \name: .skip \size
+
+.macro file.read file, name, size=all, len=xzr
+    .pushsection .rodata
+    1: .asciz "\file"
     .popsection
-    
-    .ifc \len, x0
-        .error "file.read: len's reg cannot be x0"
+
+    .pushsection .bss
+    .ifc \size, all
+    \name: .skip 4096
+    .else
+    \name: .skip \size
     .endif
-    .ifc \len, x1
-        .error "file.read: len's reg cannot be x1"
-    .endif
-    .ifc \len, x2
-        .error "file.read: len's reg cannot be x2"
-    .endif
-    .ifc \len, x8
-        .error "file.read: len's reg cannot be x8"
+    .popsection
+
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+    stp x8, x9, [sp, #-16]!
+    stp x10, x11, [sp, #-16]!
+
+    mov x0, #-100               
+    adrp x1, 1b              
+    add x1, x1, :lo12:1b
+    mov x2, #0                  
+    mov x3, #0                  
+    mov x8, #56                 
+    svc #0
+    mov x9, x0                  
+
+    .ifc \size, all
+        mov x0, x9
+        mov x1, #0
+        mov x2, #2
+        mov x8, #62
+        svc #0
+        mov x10, x0             
+
+        mov x0, x9
+        mov x1, #0
+        mov x2, #0
+        mov x8, #62
+        svc #0
+
+        mov x2, x10             
+    .else
+        mov x2, #\size          
     .endif
 
-    stp x0, x1, [sp, #-32]!
-    stp x2, x8, [sp, #-32]!
-    mov x0, \fd
+    mov x0, x9
     adrp x1, \name
     add x1, x1, :lo12:\name
-    mov x2, \size
     mov x8, #63
     svc #0
-    mov \len, x0
-    ldp x8, x2, [sp], #32
-    ldp x1, x0, [sp], #32
+    mov x11, x0                 
+
+    mov x0, x9
+    mov x8, #57
+    svc #0
+
+    .ifnc \len, xzr
+        mov \len, x11
+    .endif
+
+    ldp x10, x11, [sp], #16
+    ldp x8, x9, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
 .endm
+
 .macro printb src, t=1, m=mov
     .pushsection .bss
     1: 
@@ -151,4 +189,10 @@
     mov x8, #93
     mov x0, \code
     svc #0
+.endm
+.macro start name
+    .section .text
+    .global _start
+    _start:
+    \name:
 .endm
