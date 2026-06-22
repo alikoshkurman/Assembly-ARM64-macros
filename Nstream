@@ -1,0 +1,349 @@
+.set IPv4, 2
+.set UNIX, 1
+.set IPv6, 10
+.set lr2, 17
+
+.set SOCK.S, 1
+.set SOCK.D, 2
+.set SOCK.R, 3
+
+.set IIP, 0
+.set IICMP, 1
+.set ITCP, 6
+.set IUDP, 17
+
+.set localhost, 0x0100007F
+.set any, 0x00000000
+.set home, 0x0101A8C0
+.set this, 0x0320
+.set router, 0x0100000A
+.set althome, 0x0100A8C0
+.set APIPA, 0x0101FEA9
+.set br.cast, 0x0101FEA9
+.set corp.snet, 0x010010AC
+
+.set HTTP, 20480
+.set HTTPS, 47873
+.set SSH, 5632
+.set FTP, 5376
+.set DNS, 13568
+.set web.srvs, 8080
+.set site, 47115
+.set MySQL, 59916
+.set PSQL, 14357
+.set minecraft, 56675
+.set dynamic, 20675
+
+.set sthis.fd, 1
+.set sre.use, 2
+.set sk.live, 9
+.set ssn.buf, 7
+.set sr.buf, 8
+.set sbr.cast, 6
+.set sr.timeo, 20
+
+.macro net.open.fd reg, o=IPv4, t=SOCK.S, r=ITCP
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    mov x0, \o
+    mov x1, \t
+    mov x2, \r
+    mov x8, #198
+    svc #0
+    mov \reg, x0
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.bind reg, reg1, d, port, ip
+    .pushsection .rodata
+    .local\@:
+            .hword \d
+            .hword \port
+            .word \ip
+            .zero 8
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    mov x0, \reg
+    adrp x1, .local\@
+    add x1, x1, :lo12:.local\@
+    mov x2, #16
+    mov x8, #200
+    svc #0
+    mov \reg1, x0
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.listen reg, blog, reg1
+    stp x0, x1, [sp, #-32]!
+    str x8, [sp, #-16]!
+    mov x0, \reg
+    mov x1, \blog
+    mov x8, #201
+    svc #0
+    ldr x8, [sp], #16
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.opt arg1, arg5=1, arg2=#1, arg3=#2
+    .pushsection .rodata
+    sockopt\@: .word \arg5
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x3, [sp, #-32]!
+    str x4, [sp, #-16]!
+    str x8, [sp, #-16]!
+    mov x0, \arg1
+    mov x1, \arg2
+    mov x2, \arg3
+    adrp x3, sockopt\@
+    add x3, x3, :lo12:sockopt\@
+    mov x4, #4
+    mov x8, #208
+    svc #0
+    ldr x8, [sp], #16
+    ldr x4, [sp], #16
+    ldp x3, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.open name, port, ip=any, o=IPv4, t=SOCK.S, r=ITCP, a=1, b=#1, c=#2, listen=#5
+    stp x10, x11, [sp, #-16]!
+    net.open.fd x11, \o, \t, \r
+    net.bind x11, x10, \o, \port, \ip
+    net.opt x11, \a, \b, \c
+    net.listen x11, \listen, x10
+    save.reg x11, \name
+    ldp x11, x10, [sp], #16
+.endm
+
+.macro net.connect name, reg1_name, d, port, ip
+    .pushsection .rodata
+    .local\@:
+            .hword \d
+            .hword \port
+            .word \ip
+            .zero 8
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    push1 x13
+    load.reg x13, \name
+    mov x0, x13
+    adrp x1, .local\@
+    add x1, x1, :lo12:.local\@
+    mov x2, #16
+    mov x8, #203
+    svc #0
+    save.reg x0, \reg1_name
+    pop1 x13
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.send.to name, reg1_name, txt, d, port, ip
+    .pushsection .data
+    .msg\@: .asciz "\txt"
+    .len\@:
+    .struct\@: 
+        .hword \d
+        .hword \port
+        .word \ip
+        .zero 8
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x3, [sp, #-32]!
+    stp x4, x5, [sp, #-32]!
+    str x8, [sp, #-16]!
+    push1 x13
+    load.reg x13, \name
+    mov x0, x13
+    adrp x1, .msg\@
+    add x1, x1, :lo12:.msg\@
+    mov x2, #(.len\@ - .msg\@)
+    mov x3, #0
+    adrp x4, .struct\@
+    add x4, x4, :lo12:.struct\@
+    mov x5, #16
+    mov x8, #206
+    svc #0
+    save.reg x0, \reg1_name
+    pop1 x13
+    ldr x8, [sp], #16
+    ldp x5, x4, [sp], #32
+    ldp x3, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.get.sname name, addr_name
+    .pushsection .bss
+    \addr_name: .skip 16
+    .popsection
+    .pushsection .data
+    .local\@: .word 16
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    push1 x13
+    load.reg x13, \name
+    mov x0, x13
+    adrp x1, \addr_name
+    add x1, x1, :lo12:\addr_name
+    adrp x2, .local\@
+    add x2, x2, :lo12:.local\@
+    mov x8, #205
+    svc #0
+    pop1 x13
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.acpt name, client_name, need=no
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    push1 x13
+    load.reg x13, \name
+    mov x0, x13
+    .ifc \need, no
+        mov x1, #0
+        mov x2, #0
+    .else
+        .ifc \need, yes
+            .pushsection .bss
+            .local\@: .skip 16
+            .local_len\@: .word 16
+            .popsection
+            adrp x1, .local\@
+            add x1, x1, :lo12:.local\@
+            adrp x2, .local_len\@
+            add x2, x2, :lo12:.local_len\@
+        .else
+            .error "Unknown argument \need"
+        .endif
+    .endif
+    mov x8, #202
+    svc #0
+    save.reg x0, \client_name
+    pop1 x13
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.gtp name, name2, t=SOCK.S, r=IIP
+    .pushsection .bss
+    \name2: .skip 8
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x3, [sp, #-32]!
+    str x8, [sp, #-16]!
+    mov x0, #1
+    mov x1, \t
+    mov x2, \r
+    adrp x3, \name2
+    add x3, x3, :lo12:\name2
+    mov x8, #199
+    svc #0
+    save.reg x0, \name
+    ldr x8, [sp], #16
+    ldp x3, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.write txt, name
+    .pushsection .rodata
+    .txt\@: .ascii "\txt"
+    .local_len\@:
+    .popsection
+    stp x0, x1, [sp, #-32]!
+    stp x2, x8, [sp, #-32]!
+    push1 x13
+    load.reg x13, \name
+    mov x0, x13
+    adrp x1, .txt\@
+    add x1, x1, :lo12:.txt\@
+    mov x2, #(.local_len\@ - .txt\@)
+    mov x8, #64
+    svc #0
+    pop1 x13
+    ldp x8, x2, [sp], #32
+    ldp x1, x0, [sp], #32
+.endm
+
+.macro net.sawc txt, name, head="HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n"
+while true
+    net.acpt \name, __client\@
+    net.write "\head\txt", __client\@
+    net.close __client\@
+while.end
+.endm
+
+.macro net.read name, reg_addr, reg_len
+
+    str x19, [sp, #-32]!
+    stp x20, x21, [sp, #8]
+    str x22, [sp, #24]
+
+    load.reg x19, \name
+    mov x22, #0              
+    mov x0, #0
+    mov x8, #214
+    svc #0
+    mov x21, x0
+    mov x20, x0
+read_loop\@:
+    add x0, x20, #4096
+    mov x8, #214
+    svc #0
+    cmp x0, x20
+    beq mem_error\@
+    mov x20, x0
+    mov x0, x19
+    sub x1, x20, #4096     
+    mov x2, #4096
+    mov x8, #63
+    svc #0
+
+    cmp x0, #0
+    ble end_read\@         
+    add x22, x22, x0
+    
+    cmp x0, #4096
+    bne end_read_adjust\@ 
+    
+    add x20, x21, x22
+    mov x0, x20
+    mov x8, #214
+    svc #0
+    
+    b read_loop\@   
+end_read_adjust\@:
+    add x20, x21, x22
+    mov x0, x20
+    mov x8, #214
+    svc #0
+    b end_read\@
+mem_error\@:
+    mov x21, #0
+    mov x22, #0
+end_read\@:
+    mov \reg_addr, x21
+    mov \reg_len,  x22
+
+    ldr x22, [sp, #24]
+    ldp x20, x21, [sp, #8]
+    ldr x19, [sp], #32
+.endm
+
+.macro net.close name
+    stp x0, x8, [sp, #-32]!
+    push1 x13
+    load.reg x13, \name
+    mov x0, x13
+    mov x8, #57
+    svc #0
+    pop1 x13
+    ldp x8, x0, [sp], #32
+.endm
+
